@@ -43,40 +43,8 @@ https.get({
 /** ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- **/
 // 测试页
 app.get("/", function (req, res) {
-    res.status(200).render('test');
+    res.status(200).render('meeting');
 });
-// 取摘要任务
-var summary_task = function(callback, results) {
-    request.post({
-        url: "http://partition-svc.nlp:8080",   //"http://summary.ruoben.com:8008",
-        json: true,
-        body: {text: results.text_task},
-        timeout: 600000
-    }, function (err, res, summary) {
-        if (err) {
-            callback(err.toString());
-        } else {
-            if (res.statusCode === 200) {
-                console.log('summary=' + summary);  /////////////////
-                var sum_obj = {};
-                var lines = summary.split('\n');
-                for(var i=0; i<lines.length; i++) {
-                    sum_obj['' + i] = lines[i];
-                }
-                fs.writeFile("/var/bigbluebutton/published/presentation/test/webcams.sum", summary, function (err2) {
-                // fs.writeFile("C:\\Users\\dongyt\\Desktop\\test\\webcams.sum", summary, function (err2) {
-                    if (err2) {
-                        callback("写sum文件报错");
-                    } else {
-                        callback(null, sum_obj);
-                    }
-                });
-            } else {
-               callback("调用summary接口报错");
-            }
-        }
-    });
-};
 // 取标题任务
 var title_task = function(callback, results) {
     var options = {
@@ -94,7 +62,6 @@ var title_task = function(callback, results) {
         }).on('end', function() {
             var data = JSON.parse(Buffer.concat(body).toString());
             var title = data['summary'];  // 标题
-            console.log('title=' + title);  /////////////////
             callback(null, title);
         });
     });
@@ -114,187 +81,69 @@ var title_task = function(callback, results) {
     req.write(param);
     req.end();
 };
-// 取原文中的ner任务
-var ner_task = function(callback, results) {
-    var block = '', blocks = [];
-    var lines = results.text_task.split('\n');
-    for(var i=0; i<lines.length; i++) {
-        var str = block + lines[i];
-        if (str.length > 1500) {
-            blocks.push(block);
-            block = lines[i] + '\n';
+// 取摘要任务
+var summary_task = function(callback, results) {
+    request.post({
+        url: "http://summary.ruoben.com:8008",   //"http://partition-svc.nlp:8080"
+        json: true,
+        body: {text: results.text_task.replace(/\\n/g, '\\n')},
+        timeout: 600000
+    }, function (err, res, summary) {
+        if (err) {
+            callback(err.toString());
         } else {
-            block = str + '\n';
-        }
-    }
-    blocks.push(block.substr(0, block.length - 1));
-    var ners = [];
-    eachAsync(blocks, function(block, index, done) {
-        request.post({
-            url: "http://dd-ner-4in1-svc.nlp",   //"http://dd-ner-4in1.ruoben.com:8008",
-            body: block
-        }, function (err, res, body) {
-            if (err) {
-                done(err.toString());
+            if (res.statusCode === 200) {
+                callback(null, summary);
             } else {
-                if (res.statusCode === 200) {
-                    var json = JSON.parse(body);
-                    var ner = [];
-                    for(var i = 0; i < json['sentences'].length; i++) {
-                        for(var j = 0; j < json['sentences'][i]['tokens'].length; j++) {
-                            var n = json['sentences'][i]['tokens'][j].ner;
-                            if (n === 'PERSON' || n === 'FOREIGN' || n === 'ORG' || n === 'FOREIGN_ORG' || n === 'PLACE' || n === 'FOREIGN_PLACE') {
-                                ner.push(json['sentences'][i]['tokens'][j].word);
-                            }
-                        }
-                    }
-                    ner = _.uniq(ner);
-                    ner = _.filter(ner, function(word) {
-                        return word.length > 1;
-                    });
-                    ners = ners.concat(ner);
-                    done();
-                } else {
-                    done("调用ner接口报错");
-                }
+               callback("调用summary接口报错");
             }
-        });
-    }, function(error) {
-        if (error) {
-            console.error(error);
-            callback(error.toString());
-        } else {
-            ners = _.uniq(ners);
-            console.log('ner=' + JSON.stringify(ners));  ///////////////////
-            callback(null, ners);
         }
     });
 };
-// 取关系任务
-var spo_task = function(callback, results) {
+// 取知识元任务
+var extract_task = function(callback, results) {
     request.post({
-        url: "http://triple-svc.nlp:50000",  //"http://triple.ruoben.com:8008",
+        url: "http://extract.ruoben.com:8008",   //"http://partition-svc.nlp:8080"
         headers: {
             "Content-Type": "text/plain"
         },
         body: results.text_task,
         timeout: 600000
-    }, function (err, res, body) {
+    }, function (err, res, extract) {
         if (err) {
             callback(err.toString());
         } else {
             if (res.statusCode === 200) {
-                console.log("spo=" + body);  //////////////////
-                fs.writeFile("/var/bigbluebutton/published/presentation/test/webcams.mnd", JSON.stringify({'speaker': '测试用户', 'sum_obj': results.summary_task, 'title': results.title_task, 'spo': body}), function (err3) {
-                // fs.writeFile("C:\\Users\\dongyt\\Desktop\\test\\webcams.mnd", JSON.stringify({'speaker': '测试用户', 'sum_obj': results.summary_task, 'title': results.title_task, 'spo': retain}), function (err3) {
-                    if (err3) {
-                        callback("写mnd文件报错");
-                    } else {
-                        callback(null);
-                    }
-                });
+                callback(null, extract);
             } else {
-                callback("调用ltp接口报错");
+                callback("调用extract接口报错");
             }
         }
     });
 };
-// 接收语音识别得到的文本并生成摘要和脑图
-app.post("/test-text", function (req, response) {
+// 接收文本并生成摘要和脑图
+app.post("/", function (req, res) {
     console.log('----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------');
     var text = '' + req.body;  // 原文
     console.log('text=' + text);  //////////////////////
-    fs.writeFile("/var/bigbluebutton/published/presentation/test/webcams.txt", text, function (error) {
-    // fs.writeFile("C:\\Users\\dongyt\\Desktop\\test\\webcams.txt", text, function (error) {
-        if (error) {
-            console.error('写txt文件报错');
-            response.header('Content-Type', 'text/plain; charset=utf-8').status(500).end("写txt文件报错");
+    async.auto({
+        text_task: function (callback) {
+            callback(null, text);
+        },
+        title_task: ['text_task', title_task],
+        summary_task: ['text_task', summary_task],
+        extract_task: ['text_task', extract_task]
+    }, function(err, results) {
+        if (err) {
+            console.error(err);
+            res.header('Content-Type', 'text/plain; charset=utf-8').status(500).end(err);
         } else {
-            async.auto({
-                text_task: function (callback) {
-                    callback(null, text);
-                },
-                summary_task: ['text_task', summary_task],
-                title_task: ['text_task', title_task],
-                spo_task: ['summary_task', 'title_task', spo_task]
-            }, function(err) {
-                if (err) {
-                    console.error(err);
-                    response.header('Content-Type', 'text/plain; charset=utf-8').status(500).end(err);
-                } else {
-                    response.header('Content-Type', 'text/plain; charset=utf-8').status(200).end("success");
-                }
-            });
+            console.log('title=' + results.title_task);  /////////////////
+            console.log('summary=' + results.summary_task);  /////////////////
+            console.log('extract=' + results.extract_task);  /////////////////
+            res.status(200).json({'title': results.title_task, 'summary': results.summary_task, 'extract': results.extract_task});
         }
     });
-});
-// 取摘要和思维导图，用于test
-app.get("/test-resource", function (req, res) {
-    var exist = fs.existsSync("/var/bigbluebutton/published/presentation/test/webcams.mnd");
-    // var exist = fs.existsSync("C:\\Users\\dongyt\\Desktop\\test\\webcams.mnd");
-    if (exist) {
-        fs.readFile("/var/bigbluebutton/published/presentation/test/webcams.sum", function (err, summary) {
-        // fs.readFile("C:\\Users\\dongyt\\Desktop\\test\\webcams.sum", function (err, summary) {
-            if (err) {
-                console.error(err);
-                res.status(500).end(err.toString());
-            } else {
-                fs.readFile("/var/bigbluebutton/published/presentation/test/webcams.mnd", function (err, mnd) {
-                // fs.readFile("C:\\Users\\dongyt\\Desktop\\test\\webcams.mnd", function (err, mnd) {
-                    if (err) {
-                        console.error(err);
-                        res.status(500).end(err.toString());
-                    } else {
-                        var mind = JSON.parse(mnd.toString().replace(/%/g, '%25'));
-                        var sum_obj = mind['sum_obj'];
-                        res.status(200).json({'sum': summary.toString(), 'sum_obj': JSON.stringify(sum_obj).replace(/%25/g, '%')});
-                    }
-                });
-            }
-        });
-    } else {
-        res.header('Content-Type', 'text/plain; charset=utf-8').status(404).end("文件不存在");
-    }
-});
-// 取speaker的思维导图
-app.get("/getmind/:recordId/:speakerId", function (req, res) {
-    if (req.params.recordId === 'test') {
-        var exist = fs.existsSync("/var/bigbluebutton/published/presentation/test/webcams.mnd");
-        // var exist = fs.existsSync("C:\\Users\\dongyt\\Desktop\\test\\webcams.mnd");
-        if (exist) {
-            fs.readFile("/var/bigbluebutton/published/presentation/test/webcams.mnd", function (err, mnd) {
-            // fs.readFile("C:\\Users\\dongyt\\Desktop\\test\\webcams.mnd", function (err, mnd) {
-                if (err) {
-                    console.error(err);
-                    res.status(500).end(err.toString());
-                } else {
-                    var mind = JSON.parse(mnd.toString().replace(/%/g, '%25'));
-                    mind['record'] = 'test';
-                    res.status(200).json(mind);
-                }
-            });
-        } else {
-            res.header('Content-Type', 'text/plain; charset=utf-8').status(404).end("文件不存在");
-        }
-    } else {
-        var exist = fs.existsSync("/var/bigbluebutton/published/presentation/" + req.params.recordId + "/video/webcams." + req.params.speakerId + ".mnd");
-        // var exist = fs.existsSync("C:\\Users\\dongyt\\Desktop\\test\\webcams.mnd");
-        if (exist) {
-            fs.readFile("/var/bigbluebutton/published/presentation/" + req.params.recordId + "/video/webcams." + req.params.speakerId + ".mnd", function (err, mnd) {
-            // fs.readFile("C:\\Users\\dongyt\\Desktop\\test\\webcams.mnd", function (err, mnd) {
-                if (err) {
-                    console.error(err);
-                    res.status(500).end(err.toString());
-                } else {
-                    var mind = JSON.parse(mnd.toString().replace(/%/g, '%25'));
-                    mind['record'] = req.params.recordId;
-                    res.status(200).json(mind);
-                }
-            });
-        } else {
-            res.header('Content-Type', 'text/plain; charset=utf-8').status(404).end("文件不存在");
-        }
-    }
 });
 
 app.listen(1080, '0.0.0.0');
