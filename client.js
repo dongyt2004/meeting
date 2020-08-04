@@ -84,7 +84,7 @@ var title_task = function(callback, results) {
 // 取摘要任务
 var summary_task = function(callback, results) {
     request.post({
-        url: "http://summary.ruoben.com:8008",   //"http://partition-svc.nlp:8080"
+        url: "http://partition-svc.nlp:8080",   //"http://summary.ruoben.com:8008"
         json: true,
         body: {text: results.text_task.replace(/\\n/g, '\\n')},
         timeout: 600000
@@ -103,7 +103,7 @@ var summary_task = function(callback, results) {
 // 取知识元任务
 var extract_task = function(callback, results) {
     request.post({
-        url: "http://extract.ruoben.com:8008",   //"http://partition-svc.nlp:8080"
+        url: "http://extract-svc.nlp:44444",   //"http://extract.ruoben.com:8008"
         headers: {
             "Content-Type": "text/plain"
         },
