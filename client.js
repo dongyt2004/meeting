@@ -1,7 +1,6 @@
 const express = require('express');
 const request = require('request');
 const bodyParser = require('body-parser');
-const fs = require('fs');
 const https = require('https');
 const adaro = require('adaro');
 const path = require('path');
@@ -84,7 +83,7 @@ var title_task = function(callback, results) {
 // 取摘要任务
 var summary_task = function(callback, results) {
     request.post({
-        url: "http://partition-svc.nlp:8080",   //"http://summary.ruoben.com:8008"
+        url: "http://partition-svc.nlp:8080",   // http://summary.ruoben.com:8008
         json: true,
         body: {text: results.text_task.replace(/\\n/g, '\\n')},
         timeout: 600000
@@ -100,27 +99,176 @@ var summary_task = function(callback, results) {
         }
     });
 };
-// 取知识元任务
-var extract_task = function(callback, results) {
-    request.post({
-        url: "http://extract-svc.nlp:44444",   //"http://extract.ruoben.com:8008"
-        headers: {
-            "Content-Type": "text/plain"
-        },
-        body: results.text_task,
-        timeout: 600000
-    }, function (err, res, extract) {
-        if (err) {
-            callback(err.toString());
-        } else {
-            if (res.statusCode === 200) {
-                callback(null, extract);
+// 取spo任务
+var spo_task = function(callback, results) {
+    var spos = {};
+    var lines = results.text_task.replace(/(\n[\s\t]*\r*\n)/g, '\n').replace(/^[\n\r\n\t]*|[\n\r\n\t]*$/g, '').split('\n');
+    eachAsync(lines, function(line, index, done) {
+        request.post({
+            url: "http://triple-svc.nlp:50000",   // http://triple.ruoben.com:8008
+            headers: {
+                "Content-Type": "text/plain"
+            },
+            body: line,
+            timeout: 600000
+        }, function (err, res, spo) {
+            if (err) {
+                done(err.toString());
             } else {
-                callback("调用extract接口报错");
+                if (res.statusCode === 200) {
+                    spo = JSON.parse(spo);
+                    var triples = [];
+                    for(var i = 0; i < spo.length; i++) {
+                        if (spo[i].s && spo[i].p && spo[i].o) {
+                            triples.push(flush(spo[i]));
+                        }
+                    }
+                    spos[index] = dedup(triples);
+                    done();
+                } else {
+                    done("调用triple接口报错");
+                }
             }
+        });
+    }, function(error) {
+        if (error) {
+            console.error(error);
+            callback(error.toString());
+        } else {
+            callback(null, spos);
         }
     });
 };
+// 清洗三元组，去掉符号
+function flush(spo_object) {
+    if ((typeof spo_object) === 'string') {
+        return spo_object.replace(/{/g, "").replace(/}/g, "").replace(/\[/g, "").replace(/]/g, "").replace(/</g, "").replace(/>/g, "").replace(/《/g, "").replace(/》/g, "").replace(/`/g, "").replace(/\(/g, "").replace(/\)/g, "").replace(/~/g, "").replace(/«/g, "").replace(/»/g, "").replace(/【/g, "").replace(/】/g, "");
+    } else {
+        spo_object.s = spo_object.s.replace(/{/g, "").replace(/}/g, "").replace(/\[/g, "").replace(/]/g, "").replace(/</g, "").replace(/>/g, "").replace(/《/g, "").replace(/》/g, "").replace(/`/g, "").replace(/\(/g, "").replace(/\)/g, "").replace(/~/g, "").replace(/«/g, "").replace(/»/g, "").replace(/【/g, "").replace(/】/g, "");
+        spo_object.p = spo_object.p.replace(/{/g, "").replace(/}/g, "").replace(/\[/g, "").replace(/]/g, "").replace(/</g, "").replace(/>/g, "").replace(/《/g, "").replace(/》/g, "").replace(/`/g, "").replace(/\(/g, "").replace(/\)/g, "").replace(/~/g, "").replace(/«/g, "").replace(/»/g, "").replace(/【/g, "").replace(/】/g, "");
+        if ((typeof spo_object.o) === "string") {
+            spo_object.o = spo_object.o.replace(/{/g, "").replace(/}/g, "").replace(/\[/g, "").replace(/]/g, "").replace(/</g, "").replace(/>/g, "").replace(/《/g, "").replace(/》/g, "").replace(/`/g, "").replace(/\(/g, "").replace(/\)/g, "").replace(/~/g, "").replace(/«/g, "").replace(/»/g, "").replace(/【/g, "").replace(/】/g, "");
+        } else {
+            for(var index=0; index<spo_object.o.length; index++) {
+                spo_object.o[index] = flush(spo_object.o[index]);
+            }
+        }
+    }
+    return spo_object;
+}
+// 去重
+function dedup(triples) {
+    var to_del_index = [];
+    for(var i=0; i<triples.length; i++) {
+        var str_i = stringify(triples[i]);
+        for(var j=i+1; j<triples.length; j++) {
+            var str_j = stringify(triples[j]);
+            if (str_i.indexOf(str_j) >= 0) {
+                to_del_index.push(j);
+            } else if (str_j.indexOf(str_i) >= 0) {
+                to_del_index.push(i);
+            }
+        }
+    }
+    to_del_index = _.uniq(to_del_index);
+    var all_index = [];
+    for(index=0; index<triples.length; index++) {
+        all_index.push(index);
+    }
+    var retain_index = all_index.filter(function (val) { return to_del_index.indexOf(val) === -1 });
+    var result = [];
+    for(i = 0; i<retain_index.length; i++) {
+        result.push(triples[retain_index[i]]);
+    }
+    return result;
+}
+
+function stringify(spo_object) {
+    var s = "";
+    if ((typeof spo_object) === 'string') {
+        s = spo_object;
+    } else {
+        s = spo_object.s + spo_object.p;
+        if ((typeof spo_object.o) === "string") {
+            s += spo_object.o;
+        } else {
+            for(var index=0; index<spo_object.o.length; index++) {
+                s += stringify(spo_object.o[index]);
+            }
+        }
+    }
+    return s;
+}
+/*// 取知识元任务
+var extract_task = function(callback, results) {
+    var events = {};
+    var lines = results.text_task.split('\n');
+    eachAsync(lines, function(line, index, done) {
+        request.post({
+            url: "http://extract.ruoben.com:8008",   // http://extract-svc.nlp:44444
+            headers: {
+                "Content-Type": "text/plain"
+            },
+            body: line,
+            timeout: 600000
+        }, function (err, res, extract) {
+            if (err) {
+                done(err.toString());
+            } else {
+                if (res.statusCode === 200) {
+                    extract = JSON.parse(extract);
+                    var evt = [];
+                    for(var i = 0; i < extract.events.length; i++) {
+                        if (extract.events[i].subject !== '' && extract.events[i].predicate !== '' && extract.events[i]['object'] !== '') {
+                            var subject = extract.events[i].subject.replace(/{/g, "").replace(/}/g, "").replace(/\[/g, "").replace(/]/g, "").replace(/</g, "").replace(/>/g, "").replace(/《/g, "").replace(/》/g, "").replace(/`/g, "").replace(/\(/g, "").replace(/\)/g, "").replace(/~/g, "").replace(/«/g, "").replace(/»/g, "").replace(/【/g, "").replace(/】/g, "");
+                            var predicate = extract.events[i].predicate.replace(/{/g, "").replace(/}/g, "").replace(/\[/g, "").replace(/]/g, "").replace(/</g, "").replace(/>/g, "").replace(/《/g, "").replace(/》/g, "").replace(/`/g, "").replace(/\(/g, "").replace(/\)/g, "").replace(/~/g, "").replace(/«/g, "").replace(/»/g, "").replace(/【/g, "").replace(/】/g, "");
+                            var object = extract.events[i]['object'].replace(/{/g, "").replace(/}/g, "").replace(/\[/g, "").replace(/]/g, "").replace(/</g, "").replace(/>/g, "").replace(/《/g, "").replace(/》/g, "").replace(/`/g, "").replace(/\(/g, "").replace(/\)/g, "").replace(/~/g, "").replace(/«/g, "").replace(/»/g, "").replace(/【/g, "").replace(/】/g, "");
+                            evt.push({subject: subject, predicate: predicate, object: object});
+                        }
+                    }
+                    events[index] = dedup(evt);
+                    done();
+                } else {
+                    done("调用extract接口报错");
+                }
+            }
+        });
+    }, function(error) {
+        if (error) {
+            console.error(error);
+            callback(error.toString());
+        } else {
+            console.log('events=' + JSON.stringify(events));  ///////////////////
+            callback(null, events);
+        }
+    });
+};
+// 去重
+function dedup(events) {
+    var to_del_index = [];
+    for(var i=0; i<events.length; i++) {
+        var str_i = events[i].subject + events[i].predicate + events[i].object;
+        for(var j=i+1; j<events.length; j++) {
+            var str_j = events[j].subject + events[j].predicate + events[j].object;
+            if (str_i.indexOf(str_j) >= 0) {
+                to_del_index.push(j);
+            } else if (str_j.indexOf(str_i) >= 0) {
+                to_del_index.push(i);
+            }
+        }
+    }
+    to_del_index = _.uniq(to_del_index);
+    var all_index = [];
+    for(index=0; index<events.length; index++) {
+        all_index.push(index);
+    }
+    var retain_index = all_index.filter(function (val) { return to_del_index.indexOf(val) === -1 });
+    var result = [];
+    for(i = 0; i<retain_index.length; i++) {
+        result.push(events[retain_index[i]]);
+    }
+    return result;
+}*/
 // 接收文本并生成摘要和脑图
 app.post("/", function (req, res) {
     console.log('----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------');
@@ -132,7 +280,7 @@ app.post("/", function (req, res) {
         },
         title_task: ['text_task', title_task],
         summary_task: ['text_task', summary_task],
-        extract_task: ['text_task', extract_task]
+        spo_task: ['text_task', spo_task]
     }, function(err, results) {
         if (err) {
             console.error(err);
@@ -140,8 +288,9 @@ app.post("/", function (req, res) {
         } else {
             console.log('title=' + results.title_task);  /////////////////
             console.log('summary=' + results.summary_task);  /////////////////
-            console.log('extract=' + results.extract_task);  /////////////////
-            res.status(200).json({'title': results.title_task, 'summary': results.summary_task, 'extract': results.extract_task});
+            var spo = JSON.stringify(results.spo_task);
+            console.log('spo=' + spo);  /////////////////
+            res.status(200).json({'title': results.title_task, 'summary': results.summary_task, 'spo': spo});
         }
     });
 });

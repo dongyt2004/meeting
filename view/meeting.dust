@@ -27,14 +27,14 @@
         </div>
         <div class="row" style="margin:15px;">
             <div class="col-lg-12 col-md-12 col-sm-12 col-xs-12">
-                <button onclick="tijiao()" type="button" class="btn btn-primary center-block">显示摘要和知识导图</button>
+                <button onclick="tijiao()" type="button" class="btn btn-primary center-block">显示摘要和思维导图</button>
             </div>
         </div>
         <div class="row" style="margin:15px;">
             <div class="col-lg-12 col-md-12 col-sm-12 col-xs-12">
                 <div id="sum_container" class="form-control"></div>
                 <input type='hidden' value='' id='title'/>
-                <input type='hidden' value='' id='extract'/>
+                <input type='hidden' value='' id='spo'/>
             </div>
         </div>
         <div class="row" style="margin:15px;">
@@ -76,7 +76,7 @@
                     success: function(data) {
                        $('#sum_container')[0].innerHTML = data.summary;
                        $('#title').val(data.title);
-                       $('#extract').val(data.extract);
+                       $('#spo').val(data.spo);
                        document.getElementById('myframe').contentWindow.location.reload(true);
                        $('#myframe').attr('src', '/mindmap.html?mind=1');
                        $('#loadingModal').modal('hide');
