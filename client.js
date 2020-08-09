@@ -105,7 +105,7 @@ var spo_task = function(callback, results) {
     var lines = results.text_task.replace(/(\n[\s\t]*\r*\n)/g, '\n').replace(/^[\n\r\n\t]*|[\n\r\n\t]*$/g, '').split('\n');
     eachAsync(lines, function(line, index, done) {
         request.post({
-            url: "http://triple-svc.nlp:50000",   // http://triple.ruoben.com:8008
+            url: "http://triple.ruoben.com:8008",   // http://triple-svc.nlp:50000
             headers: {
                 "Content-Type": "text/plain"
             },
@@ -135,7 +135,11 @@ var spo_task = function(callback, results) {
             console.error(error);
             callback(error.toString());
         } else {
-            callback(null, spos);
+            var ordered_spos = {};
+            Object.keys(spos).sort().forEach(function(key) {
+                ordered_spos[key] = spos[key];
+            });
+            callback(null, ordered_spos);
         }
     });
 };
@@ -178,6 +182,7 @@ function dedup(triples) {
     var retain_index = all_index.filter(function (val) { return to_del_index.indexOf(val) === -1 });
     var result = [];
     for(i = 0; i<retain_index.length; i++) {
+        filter_vn(triples[retain_index[i]], triples, retain_index[i]);
         result.push(triples[retain_index[i]]);
     }
     return result;
@@ -198,6 +203,18 @@ function stringify(spo_object) {
         }
     }
     return s;
+}
+// 过滤掉动名词和o是空数组的spo
+function filter_vn(spo_object, spo_array, idx) {
+    if ((typeof spo_object) === 'string') {
+        spo_array.splice(idx, 1);
+    } else {
+        if ((typeof spo_object.o) !== "string") {
+            for(var index=0; index<spo_object.o.length; index++) {
+                filter_vn(spo_object.o[index], spo_object.o, index);
+            }
+        }
+    }
 }
 /*// 取知识元任务
 var extract_task = function(callback, results) {
@@ -278,16 +295,16 @@ app.post("/", function (req, res) {
         text_task: function (callback) {
             callback(null, text);
         },
-        title_task: ['text_task', title_task],
-        summary_task: ['text_task', summary_task],
+        //title_task: ['text_task', title_task],
+        //summary_task: ['text_task', summary_task],
         spo_task: ['text_task', spo_task]
     }, function(err, results) {
         if (err) {
             console.error(err);
             res.header('Content-Type', 'text/plain; charset=utf-8').status(500).end(err);
         } else {
-            console.log('title=' + results.title_task);  /////////////////
-            console.log('summary=' + results.summary_task);  /////////////////
+            // console.log('title=' + results.title_task);  /////////////////
+            // console.log('summary=' + results.summary_task);  /////////////////
             var spo = JSON.stringify(results.spo_task);
             console.log('spo=' + spo);  /////////////////
             res.status(200).json({'title': results.title_task, 'summary': results.summary_task, 'spo': spo});
