@@ -105,7 +105,7 @@ var spo_task = function(callback, results) {
     var lines = results.text_task.replace(/(\n[\s\t]*\r*\n)/g, '\n').replace(/^[\n\r\n\t]*|[\n\r\n\t]*$/g, '').split('\n');
     eachAsync(lines, function(line, index, done) {
         request.post({
-            url: "http://triple.ruoben.com:8008",   // http://triple-svc.nlp:50000
+            url: "http://triple-svc.nlp:50000",   // http://triple.ruoben.com:8008
             headers: {
                 "Content-Type": "text/plain"
             },
@@ -295,16 +295,16 @@ app.post("/", function (req, res) {
         text_task: function (callback) {
             callback(null, text);
         },
-        //title_task: ['text_task', title_task],
-        //summary_task: ['text_task', summary_task],
+        title_task: ['text_task', title_task],
+        summary_task: ['text_task', summary_task],
         spo_task: ['text_task', spo_task]
     }, function(err, results) {
         if (err) {
             console.error(err);
             res.header('Content-Type', 'text/plain; charset=utf-8').status(500).end(err);
         } else {
-            // console.log('title=' + results.title_task);  /////////////////
-            // console.log('summary=' + results.summary_task);  /////////////////
+            console.log('title=' + results.title_task);  /////////////////
+            console.log('summary=' + results.summary_task);  /////////////////
             var spo = JSON.stringify(results.spo_task);
             console.log('spo=' + spo);  /////////////////
             res.status(200).json({'title': results.title_task, 'summary': results.summary_task, 'spo': spo});
