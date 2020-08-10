@@ -182,7 +182,7 @@ function dedup(triples) {
     var retain_index = all_index.filter(function (val) { return to_del_index.indexOf(val) === -1 });
     var result = [];
     for(i = 0; i<retain_index.length; i++) {
-        filter_vn(triples[retain_index[i]], triples, retain_index[i]);
+        // filter_vn(triples[retain_index[i]], triples, retain_index[i]);
         result.push(triples[retain_index[i]]);
     }
     return result;
@@ -204,7 +204,7 @@ function stringify(spo_object) {
     }
     return s;
 }
-// 过滤掉动名词和o是空数组的spo
+/*// 过滤掉动名词和o是空数组的spo
 function filter_vn(spo_object, spo_array, idx) {
     if ((typeof spo_object) === 'string') {
         spo_array.splice(idx, 1);
@@ -215,7 +215,7 @@ function filter_vn(spo_object, spo_array, idx) {
             }
         }
     }
-}
+}*/
 /*// 取知识元任务
 var extract_task = function(callback, results) {
     var events = {};
