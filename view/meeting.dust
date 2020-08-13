@@ -64,7 +64,7 @@
                 }
                 $('#sum_container')[0].innerHTML = "";
                 $('title').val("");
-                $('extract').val("");
+                $('spo').val("");
                 document.getElementById('myframe').contentWindow.location.reload(true);
                 $('#myframe').attr('src', '/mindmap.html?mind=0');
                 $("#loadingModal").modal('show');
