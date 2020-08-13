@@ -4,7 +4,6 @@ const bodyParser = require('body-parser');
 const https = require('https');
 const adaro = require('adaro');
 const path = require('path');
-const md5 = require('md5');
 const _ = require('lodash');
 const eachAsync = require('each-async');
 const async = require('async');
@@ -187,7 +186,7 @@ function dedup(triples) {
     }
     return result;
 }
-
+// spo对象字符串化
 function stringify(spo_object) {
     var s = "";
     if ((typeof spo_object) === 'string') {
