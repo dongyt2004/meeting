@@ -34,7 +34,7 @@
     "request": "2.88.0",
     "body-parser": "1.19.0",
     "adaro": "1.0.4",
-    "lodash": "4.17.15",
+    "lodash": "4.17.19",
     "each-async": "1.1.1",
     "async": "1.5.2"
   }
