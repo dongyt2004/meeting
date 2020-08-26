@@ -192,7 +192,7 @@ function stringify(spo_object) {
     if ((typeof spo_object) === 'string') {
         s = spo_object;
     } else {
-        s = spo_object.s + spo_object.p;
+        s = spo_object.s + spo_object.p.replace(/\^/g, "");
         if ((typeof spo_object.o) === "string") {
             s += spo_object.o;
         } else {
